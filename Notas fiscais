@@ -1,0 +1,67 @@
+import sqlite3
+
+# cria conexão com o banco de dados
+conn = sqlite3.connect('notas_fiscais.db')
+
+# cria tabela de notas fiscais
+conn.execute('''CREATE TABLE notas_fiscais
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             fornecedor TEXT NOT NULL,
+             valor NUMERIC NOT NULL,
+             data_emissao TEXT NOT NULL,
+             arquivo_pdf BLOB NOT NULL,
+             arquivo_xml BLOB NOT NULL);''')
+
+# insere uma nota fiscal no banco de dados
+def inserir_nota_fiscal(fornecedor, valor, data_emissao, arquivo_pdf, arquivo_xml):
+    conn.execute("INSERT INTO notas_fiscais (fornecedor, valor, data_emissao, arquivo_pdf, arquivo_xml) \
+                  VALUES (?, ?, ?, ?, ?)", (fornecedor, valor, data_emissao, arquivo_pdf, arquivo_xml))
+    conn.commit()
+
+# busca todas as notas fiscais do banco de dados
+def buscar_notas_fiscais():
+    cursor = conn.execute("SELECT * from notas_fiscais")
+    notas_fiscais = []
+    for row in cursor:
+        nota_fiscal = {
+            "id": row[0],
+            "fornecedor": row[1],
+            "valor": row[2],
+            "data_emissao": row[3],
+            "arquivo_pdf": row[4],
+            "arquivo_xml": row[5]
+        }
+        notas_fiscais.append(nota_fiscal)
+    return notas_fiscais
+
+# fecha conexão com o banco de dados
+def fechar_conexao():
+    conn.close()
+import PyPDF2
+import xml.etree.ElementTree as ET
+
+# importar dados do arquivo PDF da nota fiscal
+def importar_pdf(caminho_arquivo):
+    with open(caminho_arquivo, 'rb') as f:
+        pdf = PyPDF2.PdfFileReader(f)
+        texto = ""
+        for pagina in range(pdf.getNumPages()):
+            texto += pdf.getPage(pagina).extractText()
+        return texto
+
+# importar dados do arquivo XML da nota fiscal
+def importar_xml(caminho_arquivo):
+    tree = ET.parse(caminho_arquivo)
+    root = tree.getroot()
+    dados_nota_fiscal = {}
+    for child in root:
+        if child.tag == "infNFe":
+            for grandchild in child:
+                if grandchild.tag == "emit":
+                    dados_nota_fiscal["emitente"] = grandchild.find("xNome").text
+                    dados_nota_fiscal["cnpj"] = grandchild.find("CNPJ").text
+                elif grandchild.tag == "total":
+                    dados_nota_fiscal["valor_total"] = grandchild.find("vNF").text
+                elif grandchild.tag == "ide":
+                    dados_nota_fiscal["data_emissao"] = grandchild.find("dhEmi").text
+    return dados_nota_fiscal
