@@ -65,3 +65,75 @@ def importar_xml(caminho_arquivo):
                 elif grandchild.tag == "ide":
                     dados_nota_fiscal["data_emissao"] = grandchild.find("dhEmi").text
     return dados_nota_fiscal
+
+import PyPDF2
+import xml.etree.ElementTree as ET
+import os
+import sqlite3
+
+# importar dados do arquivo PDF da nota fiscal
+def importar_pdf(caminho_arquivo):
+    with open(caminho_arquivo, 'rb') as f:
+        pdf = PyPDF2.PdfFileReader(f)
+        texto = ""
+        for pagina in range(pdf.getNumPages()):
+            texto += pdf.getPage(pagina).extractText()
+        return texto
+
+# importar dados do arquivo XML da nota fiscal
+def importar_xml(caminho_arquivo):
+    try:
+        tree = ET.parse(caminho_arquivo)
+        root = tree.getroot()
+        # validar o arquivo XML da nota fiscal
+        schema_file = "nfe_v4.00.xsd"
+        schema_path = os.path.join(os.path.dirname(__file__), schema_file)
+        schema = ET.XMLSchema(file=schema_path)
+        schema.assertValid(tree)
+        # extrair os dados da nota fiscal
+        dados_nota_fiscal = {}
+        for child in root:
+            if child.tag == "infNFe":
+                for grandchild in child:
+                    if grandchild.tag == "emit":
+                        dados_nota_fiscal["emitente"] = grandchild.find("xNome").text
+                        dados_nota_fiscal["cnpj"] = grandchild.find("CNPJ").text
+                    elif grandchild.tag == "total":
+                        dados_nota_fiscal["valor_total"] = grandchild.find("vNF").text
+                    elif grandchild.tag == "ide":
+                        dados_nota_fiscal["data_emissao"] = grandchild.find("dhEmi").text
+        return dados_nota_fiscal
+    except ET.ParseError:
+        print("Arquivo XML inválido.")
+        return None
+    except ET.XMLSchemaError as e:
+        print("Erro na validação do arquivo XML: {}".format(e))
+        return None
+
+# armazenar dados da nota fiscal em um banco de dados SQLite
+def armazenar_nota_fiscal(dados_nota_fiscal):
+    conn = sqlite3.connect('notas_fiscais.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS notas_fiscais
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  emitente TEXT,
+                  cnpj TEXT,
+                  valor_total REAL,
+                  data_emissao TEXT)''')
+    c.execute("INSERT INTO notas_fiscais (emitente, cnpj, valor_total, data_emissao) VALUES (?, ?, ?, ?)",
+              (dados_nota_fiscal["emitente"], dados_nota_fiscal["cnpj"], float(dados_nota_fiscal["valor_total"]),
+               dados_nota_fiscal["data_emissao"]))
+    conn.commit()
+    conn.close()
+
+# pesquisar notas fiscais no banco de dados
+def pesquisar_notas_fiscais(filtro=None):
+    conn = sqlite3.connect('notas_fiscais.db')
+    c = conn.cursor()
+    if filtro:
+        c.execute("SELECT * FROM notas_fiscais WHERE emitente LIKE ? OR cnpj LIKE ?",
+                  ('%{}%'.format(filtro), '%{}%'.format(filtro)))
+    else:
+        c.execute("SELECT * FROM notas_fiscais")
+    notas_fiscais =
+
